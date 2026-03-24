@@ -67,14 +67,14 @@ curl -X DELETE http://localhost:8080/block/test-1
 ```bash
 curl http://localhost:8080/health
 ```
-
+<!-- 
 ## Known Limitations
 
 - No rollback mechanism for partial replication failures (will be replaced with Raft consensus)
 - In-memory storage only (no persistence yet)
-- Sequential replication (not parallel)
+- Sequential replication (not parallel) -->
 
-## Roadmap
+<!-- ## Roadmap
 
 - [ ] Week 3: Add failure detection
 - [ ] Week 4: Consistent hashing for block placement
@@ -90,4 +90,4 @@ This project is built as part of an intensive preparation program covering:
 - Site Reliability Engineering (SRE Book, SRE Workbook)
 - Database internals (Kleppmann's DDIA)
 - Observability (Prometheus, Grafana, OpenTelemetry)
-- Kubernetes and GKE deployment
+- Kubernetes and GKE deployment -->
