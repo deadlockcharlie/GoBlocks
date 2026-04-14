@@ -1,36 +1,41 @@
 package server
 
 import (
-	"log"
-	"net/http"
-
 	"blockstore/config"
 	"blockstore/replication"
 	"blockstore/storage"
+	"fmt"
+	"log"
+	"net/http"
 )
 
 type Server struct {
 	handler *Handler
 	port    string
+	node    *replication.Node
 }
 
-func New(cfg *config.Config) *Server {
+func New(cfg *config.Config) (*Server, error) {
+	// Create a new store
 	store := storage.New()
+	node, err := replication.New(cfg.Name, cfg.ZKAddress, cfg.ZKPort)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create replication node: %v", err)
+	}
+	log.Printf("connected to zookeeper %s:%s", cfg.ZKAddress, cfg.ZKPort)
+	if node.Replicas == nil || len(node.Replicas) == 0 {
+		log.Print("Did not find any replicas in the ring.")
+	}
+	log.Printf("discovered Nodes: %v", node.Replicas)
 
 	var replClient *replication.Client
-	isPrimary := cfg.Role == config.RolePrimary
 
-	if isPrimary && len(cfg.Replicas) > 0 {
-		replClient = replication.NewClient(cfg.Replicas)
-		log.Printf("Primary mode - discovered replicas: %v", cfg.Replicas)
-	}
-
-	handler := NewHandler(store, replClient, isPrimary)
-
+	handler := NewHandler(store, replClient)
 	return &Server{
 		handler: handler,
 		port:    cfg.Port,
-	}
+		node:    node,
+	}, nil
 }
 
 func (s *Server) Start() error {
@@ -67,4 +72,10 @@ func (s *Server) Start() error {
 
 func (s *Server) GetPort() string {
 	return s.port
+}
+
+func (s *Server) Shutdown() {
+	// Capture user issues terminates via ctrl+c and ctrl+d and shutdown the server
+	log.Println("Shutting down server...")
+	s.node.Shutdown()
 }

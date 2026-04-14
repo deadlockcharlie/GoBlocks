@@ -3,38 +3,38 @@ package config
 import (
 	"flag"
 	"os"
-	"strings"
 )
 
 const (
-	BlockSize     = 4096
-	RolePrimary   = "primary"
-	RoleSecondary = "secondary"
+	BlockSize = 4096
+	//RolePrimary   = "primary"
+	//RoleSecondary = "secondary"
 )
 
 type Config struct {
-	Port     string
-	Role     string
-	Replicas []string
+	ZKAddress string
+	ZKPort    string
+	Name      string
+	Host      string
+	Port      string
 }
 
 func Load() *Config {
-	port := flag.String("port", "8080", "Port to listen on")
+	port := flag.String("port", "3000", "Port to listen on")
 	flag.Parse()
 
-	replicas := os.Getenv("REPLICAS")
-	role := os.Getenv("ROLE")
+	//replicas := os.Getenv("REPLICAS")
+	//role := os.Getenv("ROLE")
+	zkAddress := os.Getenv("ZKAddress")
+	name := os.Getenv("Name")
+	zkPort := os.Getenv("ZKPort")
 
 	cfg := &Config{
 		Port: *port,
-		Role: RoleSecondary,
-	}
-
-	if role == RolePrimary {
-		cfg.Role = role
-		if replicas != "" {
-			cfg.Replicas = strings.Split(replicas, ",")
-		}
+		//Role:      RoleSecondary,
+		ZKAddress: zkAddress,
+		ZKPort:    zkPort,
+		Name:      name,
 	}
 
 	return cfg

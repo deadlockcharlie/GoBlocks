@@ -14,14 +14,12 @@ import (
 type Handler struct {
 	store      *storage.BlockStore
 	replClient *replication.Client
-	isPrimary  bool
 }
 
-func NewHandler(store *storage.BlockStore, replClient *replication.Client, isPrimary bool) *Handler {
+func NewHandler(store *storage.BlockStore, replClient *replication.Client) *Handler {
 	return &Handler{
 		store:      store,
 		replClient: replClient,
-		isPrimary:  isPrimary,
 	}
 }
 
@@ -46,7 +44,7 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If primary, replicate to followers
-	if h.isPrimary && h.replClient != nil {
+	if h.replClient != nil {
 		err = h.replClient.ReplicateToAll(id, block)
 		if err != nil {
 			log.Printf("Replication failed: %v", err)
