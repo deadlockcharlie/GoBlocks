@@ -12,11 +12,11 @@ const (
 )
 
 type Config struct {
-	ZKAddress string
-	ZKPort    string
-	Name      string
-	Host      string
-	Port      string
+	ZKAddress      string
+	ZKPort         string
+	ReplicaName    string
+	ReplicaAddress string
+	ReplicaPort    string
 }
 
 func Load() *Config {
@@ -26,15 +26,17 @@ func Load() *Config {
 	//replicas := os.Getenv("REPLICAS")
 	//role := os.Getenv("ROLE")
 	zkAddress := os.Getenv("ZKAddress")
-	name := os.Getenv("Name")
+	name := os.Getenv("ReplicaName")
 	zkPort := os.Getenv("ZKPort")
+	host := os.Getenv("ReplicaAddress")
 
 	cfg := &Config{
-		Port: *port,
+		ReplicaPort: *port,
 		//Role:      RoleSecondary,
-		ZKAddress: zkAddress,
-		ZKPort:    zkPort,
-		Name:      name,
+		ZKAddress:      zkAddress,
+		ZKPort:         zkPort,
+		ReplicaName:    name,
+		ReplicaAddress: host,
 	}
 
 	return cfg

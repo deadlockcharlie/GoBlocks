@@ -1,6 +1,6 @@
 # GoBlocks - Distributed Block Store
 
-A distributed block storage system built in Go with 3-way replication, inspired by concepts from GFS and Ceph.
+A distributed block storage system built in Go with replication, inspired by concepts from GFS and Ceph.
 
 ## Features
 

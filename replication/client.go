@@ -10,14 +10,14 @@ import (
 )
 
 type Client struct {
-	httpClient *http.Client
-	replicas   []string
+	HttpClient *http.Client
+	Node       *Node
 }
 
-func NewClient(replicas []string) *Client {
+func NewClient(n *Node) *Client {
 	return &Client{
-		httpClient: &http.Client{},
-		replicas:   replicas,
+		HttpClient: &http.Client{},
+		Node:       n,
 	}
 }
 
@@ -31,7 +31,7 @@ func (c *Client) ForwardToReplica(addr string, id string, block [config.BlockSiz
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.HttpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (c *Client) ForwardToReplica(addr string, id string, block [config.BlockSiz
 }
 
 func (c *Client) ReplicateToAll(id string, block [config.BlockSize]byte) error {
-	for _, replica := range c.replicas {
+	for _, replica := range c.Node.Replicas {
 		err := c.ForwardToReplica(replica, id, block)
 		if err != nil {
 			return fmt.Errorf("replication to %s failed: %w", replica, err)

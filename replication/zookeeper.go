@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"blockstore/config"
 	"errors"
 	"log"
 	"strings"
@@ -17,9 +18,9 @@ type Node struct {
 	Connection *zk.Conn `json:"-"`
 }
 
-func New(name string, address string, port string) (*Node, error) {
+func NewZookeeper(cfg *config.Config) (*Node, error) {
 
-	conn, _, err := zk.Connect([]string{address}, time.Second*5)
+	conn, _, err := zk.Connect([]string{cfg.ZKAddress}, time.Second*5)
 
 	if err != nil {
 		return nil, err
@@ -31,9 +32,9 @@ func New(name string, address string, port string) (*Node, error) {
 		return nil, err
 	}
 	node := &Node{
-		Name:       name,
-		Address:    address,
-		Port:       port,
+		Name:       cfg.ReplicaName,
+		Address:    cfg.ReplicaAddress,
+		Port:       cfg.ReplicaPort,
 		Replicas:   []string{},
 		Connection: conn,
 	}
@@ -86,6 +87,7 @@ func (n *Node) registerNode(conn *zk.Conn, node *Node) error {
 	}
 	// registrationPath := nodePath + "/node-"
 	data := []byte(node.Address + ":" + node.Port)
+	log.Printf("Registering node with data %s", string(data))
 	// An ephemeral node is deleted when a connection terminates.
 	createdPath, err := conn.CreateProtectedEphemeralSequential(nodePath, data, zk.WorldACL(zk.PermAll))
 	if err != nil {
@@ -111,14 +113,15 @@ func (n *Node) discoverReplicas(conn *zk.Conn) error {
 	if err != nil {
 		return err
 	}
+	n.resolveReplicas(conn)
 	log.Printf("Found %v nodes from the ring: %v", len(nodes), nodes)
-	go n.watchNodes(conn, basePath)
+	go n.watchReplicas(conn, basePath)
 
 	return nil
 
 }
 
-func (n *Node) watchNodes(conn *zk.Conn, basePath string) {
+func (n *Node) watchReplicas(conn *zk.Conn, basePath string) {
 	for {
 		_, _, events, err := conn.ChildrenW(basePath)
 		if err != nil {
@@ -128,13 +131,26 @@ func (n *Node) watchNodes(conn *zk.Conn, basePath string) {
 		event := <-events
 		if event.Type == zk.EventNodeChildrenChanged {
 			nodes, _, err := conn.Children("/nodes")
+
 			if err != nil {
 				log.Printf("Failed to fetch nodes on ring change: %s", err)
 				continue
 			}
 			log.Printf("Found nodes on ring change: %v", nodes)
 			n.Replicas = nodes
+			n.resolveReplicas(conn)
 		}
+	}
+}
+
+func (n *Node) resolveReplicas(conn *zk.Conn) {
+	//var resolvedReplicas []string
+	for i, replica := range n.Replicas {
+		data, _, err := conn.Get("/nodes/" + replica)
+		if err != nil {
+			log.Fatalf("Failed to resolve replica %s: %s", replica, err)
+		}
+		n.Replicas[i] = string(data)
 	}
 }
 
