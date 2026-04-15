@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"blockstore/config"
 )
@@ -45,9 +46,10 @@ func (c *Client) ForwardToReplica(addr string, id string, block [config.BlockSiz
 	return nil
 }
 
-func (c *Client) ReplicateToAll(id string, block [config.BlockSize]byte) error {
-	for _, replica := range c.Node.Replicas {
-		if replica == "" {
+func (c *Client) ReplicateToAll(id string, source string, block [config.BlockSize]byte) error {
+	log.Printf("Replicating from: %s", source)
+	for key, replica := range c.Node.Replicas {
+		if replica == "" || strings.Contains(key, source) {
 			continue
 		}
 		err := c.ForwardToReplica(replica, id, block)

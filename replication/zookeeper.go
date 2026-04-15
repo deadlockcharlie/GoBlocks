@@ -4,6 +4,7 @@ import (
 	"blockstore/config"
 	"errors"
 	"log"
+	"maps"
 	"strings"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 )
 
 type Node struct {
-	Name       string   `json:"name" validate:"required"`
-	Address    string   `json:"address" validate:"required"`
-	Port       string   `json:"port" validate:"required"`
-	Replicas   []string `json:"replicas"`
-	Connection *zk.Conn `json:"-"`
+	Name       string            `json:"name" validate:"required"`
+	Address    string            `json:"address" validate:"required"`
+	Port       string            `json:"port" validate:"required"`
+	Replicas   map[string]string `json:"replicas"`
+	Connection *zk.Conn          `json:"-"`
 }
 
 func NewZookeeper(cfg *config.Config) (*Node, error) {
@@ -35,7 +36,7 @@ func NewZookeeper(cfg *config.Config) (*Node, error) {
 		Name:       cfg.ReplicaName,
 		Address:    cfg.ReplicaAddress,
 		Port:       cfg.ReplicaPort,
-		Replicas:   []string{},
+		Replicas:   map[string]string{},
 		Connection: conn,
 	}
 
@@ -81,10 +82,10 @@ func createPath(conn *zk.Conn, path string) error {
 
 func (n *Node) registerNode(conn *zk.Conn, node *Node) error {
 	nodePath := "/nodes/" + node.Name
-	// Ensure that the node name exists
-	if err := createPath(conn, nodePath); err != nil {
-		return err
-	}
+	//// Ensure that the node name exists
+	//if err := createPath(conn, nodePath); err != nil {
+	//	return err
+	//}
 	// registrationPath := nodePath + "/node-"
 	data := []byte(node.Address + ":" + node.Port)
 	log.Printf("Registering node with data %s", string(data))
@@ -109,12 +110,14 @@ func (n *Node) discoverReplicas(conn *zk.Conn) error {
 	}
 
 	nodes, _, err := conn.Children(basePath)
-	n.Replicas = nodes
+	for _, node := range nodes {
+		n.Replicas[node] = ""
+	}
 	if err != nil {
 		return err
 	}
 	n.resolveReplicas(conn)
-	log.Printf("Found %v nodes from the ring: %v", len(nodes), nodes)
+	log.Printf("Found %v nodes from the ring: %v", len(nodes), n.Replicas)
 	go n.watchReplicas(conn, basePath)
 
 	return nil
@@ -137,7 +140,9 @@ func (n *Node) watchReplicas(conn *zk.Conn, basePath string) {
 				continue
 			}
 			log.Printf("Found nodes on ring change: %v", nodes)
-			n.Replicas = nodes
+			for _, node := range nodes {
+				n.Replicas[node] = ""
+			}
 			n.resolveReplicas(conn)
 		}
 	}
@@ -145,13 +150,15 @@ func (n *Node) watchReplicas(conn *zk.Conn, basePath string) {
 
 func (n *Node) resolveReplicas(conn *zk.Conn) {
 	//var resolvedReplicas []string
-	for i, replica := range n.Replicas {
+	for replica, _ := range n.Replicas {
 		data, _, err := conn.Get("/nodes/" + replica)
 		if err != nil {
-			log.Fatalf("Failed to resolve replica %s: %s", replica, err)
+			log.Printf("Failed to resolve replica %s: %s", replica, err)
+			n.Replicas[replica] = ""
 		}
-		n.Replicas[i] = string(data)
+		n.Replicas[replica] = string(data)
 	}
+	maps.DeleteFunc(n.Replicas, func(k string, v string) bool { return v == "" })
 }
 
 func (n *Node) Shutdown() {

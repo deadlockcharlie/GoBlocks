@@ -28,7 +28,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/block")
+	id := strings.TrimPrefix(r.URL.Path, "/block/")
 
 	block, err := storage.ReadBlock(r.Body)
 	if err != nil {
@@ -45,7 +45,7 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 
 	// If primary, replicate to followers
 	if h.replClient != nil {
-		err = h.replClient.ReplicateToAll(id, block)
+		err = h.replClient.ReplicateToAll(id, h.replClient.Node.Name, block)
 		if err != nil {
 			log.Printf("Replication failed: %v", err)
 			// TODO: rollback or implement proper 2PC - known limitation for now
@@ -58,7 +58,7 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/block")
+	id := strings.TrimPrefix(r.URL.Path, "/block/")
 
 	block, ok := h.store.Get(id)
 	if !ok {
@@ -71,7 +71,7 @@ func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/block")
+	id := strings.TrimPrefix(r.URL.Path, "/block/")
 
 	ok := h.store.Delete(id)
 	if !ok {
@@ -83,7 +83,7 @@ func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/internal/block")
+	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
 	log.Printf("Internal PUT for block: %s", id)
 
 	block, err := storage.ReadBlock(r.Body)
@@ -102,7 +102,7 @@ func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) InternalDeleteBlock(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/internal/block")
+	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
 
 	ok := h.store.Delete(id)
 	if !ok {
