@@ -47,9 +47,12 @@ func (c *Client) ForwardToReplica(addr string, id string, block [config.BlockSiz
 
 func (c *Client) ReplicateToAll(id string, block [config.BlockSize]byte) error {
 	for _, replica := range c.Node.Replicas {
+		if replica == "" {
+			continue
+		}
 		err := c.ForwardToReplica(replica, id, block)
 		if err != nil {
-			return fmt.Errorf("replication to %s failed: %w", replica, err)
+			return fmt.Errorf("replication failed: %w", err)
 		}
 	}
 	return nil

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"io"
+	"log"
 	"sync"
 
 	"blockstore/config"
@@ -45,6 +46,7 @@ func (s *BlockStore) Delete(id string) bool {
 func ReadBlock(r io.Reader) ([config.BlockSize]byte, error) {
 	var block [config.BlockSize]byte
 	n, err := io.ReadFull(r, block[:])
+	log.Print("read block size: ", n)
 	if err != nil {
 		return block, err
 	}
