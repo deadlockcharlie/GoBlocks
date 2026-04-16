@@ -76,11 +76,12 @@ func (c *Client) PutBlock(blockID string, block [config.BlockSize]byte) error {
 	log.Printf("Replicating block %s to nodes: %v", blockID, nodes)
 	for _, replica := range nodes {
 		if replica.Name == c.Node.Name {
-			// Local node is one of the nodes responsible for this blockID. So, store it locally
+			// Local node is responsible: store locally, no HTTP call needed
 			err := c.Node.Store.Put(blockID, block)
 			if err != nil {
 				return err
 			}
+			continue
 		}
 		err := c.PutInReplica(replica, blockID, block)
 		if err != nil {
@@ -95,8 +96,8 @@ func (c *Client) DeleteBlock(blockID string) error {
 	log.Printf("Replicating block %s to nodes: %v", blockID, nodes)
 	for _, replica := range nodes {
 		if replica.Name == c.Node.Name {
-			// Local node is one of the nodes responsible for this blockID. So, store it locally
 			c.Node.Store.Delete(blockID)
+			continue
 		}
 		err := c.DeleteInReplica(replica, blockID)
 		if err != nil {
@@ -113,7 +114,10 @@ func (c *Client) GetBlock(blockID string) ([config.BlockSize]byte, error) {
 	}
 	// if the local node is responsible, lookup the local store.
 	if slices.ContainsFunc(nodes, func(replica ReplicaInfo) bool { return c.Node.Name == replica.Name }) {
-		block, _ := c.Node.Store.Get(blockID)
+		block, ok := c.Node.Store.Get(blockID)
+		if !ok {
+			return [config.BlockSize]byte{}, fmt.Errorf("block %s not found", blockID)
+		}
 		return block, nil
 	}
 

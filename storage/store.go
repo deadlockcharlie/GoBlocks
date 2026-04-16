@@ -24,11 +24,11 @@ func (s *BlockStore) Put(id string, block [config.BlockSize]byte) error {
 	return nil
 }
 
-func (s *BlockStore) Get(id string) ([config.BlockSize]byte, error) {
+func (s *BlockStore) Get(id string) ([config.BlockSize]byte, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	block := s.blocks[id]
-	return block, nil
+	block, ok := s.blocks[id]
+	return block, ok
 }
 
 func (s *BlockStore) Delete(id string) {
