@@ -3,7 +3,6 @@ package server
 import (
 	"blockstore/config"
 	"blockstore/replication"
-	"blockstore/storage"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,14 +10,12 @@ import (
 
 type Server struct {
 	Handler *Handler
-	Port    string
 	Node    *replication.Node
 }
 
 func New(cfg *config.Config) (*Server, error) {
-	// Create a new store
-	store := storage.New()
-	node, err := replication.NewZookeeper(cfg)
+
+	node, err := replication.NewNode(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create replication node: %v", err)
 	}
@@ -30,10 +27,9 @@ func New(cfg *config.Config) (*Server, error) {
 
 	replClient := replication.NewClient(node)
 
-	handler := NewHandler(store, replClient)
+	handler := NewHandler(replClient)
 	return &Server{
 		Handler: handler,
-		Port:    cfg.ReplicaPort,
 		Node:    node,
 	}, nil
 }
@@ -65,13 +61,9 @@ func (s *Server) Start() error {
 		}
 	})
 
-	addr := ":" + s.Port
+	addr := ":" + s.Node.Port
 	log.Printf("Server starting on %s", addr)
 	return http.ListenAndServe(addr, nil)
-}
-
-func (s *Server) GetPort() string {
-	return s.Port
 }
 
 func (s *Server) Shutdown() {

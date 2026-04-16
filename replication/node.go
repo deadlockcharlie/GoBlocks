@@ -2,24 +2,55 @@ package replication
 
 import (
 	"blockstore/config"
+	"blockstore/storage"
 	"errors"
 	"log"
 	"maps"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-zookeeper/zk"
 )
 
-type Node struct {
-	Name       string            `json:"name" validate:"required"`
-	Address    string            `json:"address" validate:"required"`
-	Port       string            `json:"port" validate:"required"`
-	Replicas   map[string]string `json:"replicas"`
-	Connection *zk.Conn          `json:"-"`
+type ReplicaInfo struct {
+	Name    string
+	Address string
+	Port    string
 }
 
-func NewZookeeper(cfg *config.Config) (*Node, error) {
+func (info *ReplicaInfo) String() string {
+	return info.Name + "$" + info.Address + ":" + info.Port
+}
+
+func ToMap(data string) (ReplicaInfo, error) {
+	nameAddr := strings.Split(data, "$")
+	if len(nameAddr) != 2 {
+		return ReplicaInfo{}, errors.New("invalid replica info")
+	}
+	name := nameAddr[0]
+	address := strings.Split(nameAddr[1], ":")[0]
+	port := strings.Split(nameAddr[1], ":")[1]
+	return ReplicaInfo{
+		Name:    name,
+		Address: address,
+		Port:    port,
+	}, nil
+}
+
+type Node struct {
+	Name              string
+	Address           string
+	Port              string
+	Replicas          map[string]ReplicaInfo
+	Connection        *zk.Conn
+	ringMutex         sync.RWMutex
+	ReplicationFactor int
+	HashRing          *HashRing
+	Store             *storage.BlockStore
+}
+
+func NewNode(cfg *config.Config) (*Node, error) {
 
 	conn, _, err := zk.Connect([]string{cfg.ZKAddress}, time.Second*5)
 
@@ -32,12 +63,18 @@ func NewZookeeper(cfg *config.Config) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	ring := NewHashRing()
+	Store := storage.NewStore()
+
 	node := &Node{
-		Name:       cfg.ReplicaName,
-		Address:    cfg.ReplicaAddress,
-		Port:       cfg.ReplicaPort,
-		Replicas:   map[string]string{},
-		Connection: conn,
+		Name:              cfg.ReplicaName,
+		Address:           cfg.ReplicaAddress,
+		Port:              cfg.ReplicaPort,
+		ReplicationFactor: cfg.ReplicationFactor,
+		Replicas:          map[string]ReplicaInfo{},
+		Connection:        conn,
+		HashRing:          ring,
+		Store:             Store,
 	}
 
 	err = node.registerNode(conn, node)
@@ -50,6 +87,7 @@ func NewZookeeper(cfg *config.Config) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return node, nil
 }
 
@@ -87,10 +125,16 @@ func (n *Node) registerNode(conn *zk.Conn, node *Node) error {
 	//	return err
 	//}
 	// registrationPath := nodePath + "/node-"
-	data := []byte(node.Address + ":" + node.Port)
-	log.Printf("Registering node with data %s", string(data))
+	data := ReplicaInfo{
+		Name:    node.Name,
+		Address: node.Address,
+		Port:    node.Port,
+	}
+
+	//[]byte(node.Address + ":" + node.Port)
+	log.Printf("Registering node with data %s", (data).String())
 	// An ephemeral node is deleted when a connection terminates.
-	createdPath, err := conn.CreateProtectedEphemeralSequential(nodePath, data, zk.WorldACL(zk.PermAll))
+	createdPath, err := conn.CreateProtectedEphemeralSequential(nodePath, []byte(data.String()), zk.WorldACL(zk.PermAll))
 	if err != nil {
 		return err
 	}
@@ -111,7 +155,7 @@ func (n *Node) discoverReplicas(conn *zk.Conn) error {
 
 	nodes, _, err := conn.Children(basePath)
 	for _, node := range nodes {
-		n.Replicas[node] = ""
+		n.Replicas[node] = ReplicaInfo{}
 	}
 	if err != nil {
 		return err
@@ -141,24 +185,36 @@ func (n *Node) watchReplicas(conn *zk.Conn, basePath string) {
 			}
 			log.Printf("Found nodes on ring change: %v", nodes)
 			for _, node := range nodes {
-				n.Replicas[node] = ""
+				n.Replicas[node] = ReplicaInfo{}
 			}
 			n.resolveReplicas(conn)
 		}
 	}
 }
 
+// The hashring is populated everytime we resolve replicas. This is the only function where the ring is modified.
 func (n *Node) resolveReplicas(conn *zk.Conn) {
 	//var resolvedReplicas []string
 	for replica, _ := range n.Replicas {
 		data, _, err := conn.Get("/nodes/" + replica)
 		if err != nil {
 			log.Printf("Failed to resolve replica %s: %s", replica, err)
-			n.Replicas[replica] = ""
+			n.Replicas[replica] = ReplicaInfo{}
 		}
-		n.Replicas[replica] = string(data)
+
+		dataMap, e := ToMap(string(data))
+		if e != nil {
+			log.Printf("Failed to resolve replica %s: %s", replica, err)
+		}
+		n.Replicas[replica] = dataMap
 	}
-	maps.DeleteFunc(n.Replicas, func(k string, v string) bool { return v == "" })
+	maps.DeleteFunc(n.Replicas, func(k string, v ReplicaInfo) bool { return v.Address == "" })
+	for _, replica := range n.Replicas {
+		n.HashRing.ResolveVNodes(&replica)
+	}
+
+	log.Printf("Added to vnodes: %v", n.HashRing.VNodes)
+
 }
 
 func (n *Node) Shutdown() {

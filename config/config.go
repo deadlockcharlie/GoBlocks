@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"strconv"
 )
 
 const (
@@ -12,11 +13,12 @@ const (
 )
 
 type Config struct {
-	ZKAddress      string
-	ZKPort         string
-	ReplicaName    string
-	ReplicaAddress string
-	ReplicaPort    string
+	ZKAddress         string
+	ZKPort            string
+	ReplicaName       string
+	ReplicaAddress    string
+	ReplicaPort       string
+	ReplicationFactor int
 }
 
 func Load() *Config {
@@ -29,14 +31,16 @@ func Load() *Config {
 	name := os.Getenv("ReplicaName")
 	zkPort := os.Getenv("ZKPort")
 	host := os.Getenv("ReplicaAddress")
+	replicationFactor, _ := strconv.Atoi(os.Getenv("ReplicationFactor"))
 
 	cfg := &Config{
 		ReplicaPort: *port,
 		//Role:      RoleSecondary,
-		ZKAddress:      zkAddress,
-		ZKPort:         zkPort,
-		ReplicaName:    name,
-		ReplicaAddress: host,
+		ZKAddress:         zkAddress,
+		ZKPort:            zkPort,
+		ReplicaName:       name,
+		ReplicaAddress:    host,
+		ReplicationFactor: replicationFactor,
 	}
 
 	return cfg
