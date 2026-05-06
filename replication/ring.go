@@ -9,16 +9,19 @@ import (
 const VnodeCountPerNode = 2
 
 type HashRing struct {
-	VNodes []VNode
+	VNodes    []VNode
+	OldVNodes []VNode
 }
 
 func NewHashRing() *HashRing {
 	return &HashRing{
-		VNodes: []VNode{},
+		VNodes:    []VNode{},
+		OldVNodes: []VNode{},
 	}
 }
 
 func (ring *HashRing) ResolveVNodes(node *ReplicaInfo) {
+	ring.OldVNodes = ring.VNodes
 	for i := 0; i < VnodeCountPerNode; i++ {
 		vnode := NewVNode(node, i)
 		if slices.ContainsFunc(ring.VNodes, func(v VNode) bool { return v.Hash == vnode.Hash }) {
@@ -39,7 +42,7 @@ func (ring *HashRing) GetNodesForBlock(blockID string, replicationFactor int) []
 	blockHash := getHash(blockID)
 	log.Print("Block hash is ", blockHash)
 	var nodes []ReplicaInfo
-	// THis search is implemented as a range function over the list. This can be improved by making the ring into a tree.
+	// This search is implemented as a range function over the list. This can be improved by making the ring into a tree.
 	// TODO: Implement a tree structure to better search the vnodes. R-B tree or B-Tree
 	startIndex := sort.Search(len(ring.VNodes), func(i int) bool {
 		return ring.VNodes[i].Hash >= blockHash
