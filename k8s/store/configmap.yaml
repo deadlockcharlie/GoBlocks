@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: zookeeperconfig
+  namespace: goblocks
+data:
+  ZKAddress: "zookeeper" #our zookeeper is running as a service within the same namespace so there is no requirement for a fully qualified name here. 
+  ZKPort: "2181"
