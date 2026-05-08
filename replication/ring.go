@@ -98,7 +98,7 @@ func (ring *HashRing) CommitRebalancing() {
 
 func (ring *HashRing) GetActiveRing() []VNode {
 	ring.lock.RLock()
-	defer ring.lock.Unlock()
+	defer ring.lock.RUnlock()
 
 	if ring.Rebalancing {
 		return ring.OldVNodes

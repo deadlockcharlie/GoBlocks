@@ -94,7 +94,7 @@ func (h *Handler) InternalDeleteBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
 
 	h.replClient.Node.Store.Delete(id)
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 
 func parseBlock(r io.Reader) ([config.BlockSize]byte, error) {
