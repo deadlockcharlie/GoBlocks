@@ -45,8 +45,60 @@ GoBlockStore/
 └── k8s/              # Kubernetes deployment manifests
     ├── ns.yaml
     ├── zookeeper/    # ZooKeeper deployment
-    └── blockstore/   # StatefulSet, Services, ConfigMap
+    ├── observability/ # Jaeger for distributed tracing
+    └── store/        # StatefulSet, Services, ConfigMap
 ```
+
+## Observability & Tracing
+
+GoBlockStore includes comprehensive observability using **OpenTelemetry** and **Jaeger** for distributed tracing.
+
+### **What's Instrumented**
+
+- **HTTP Handlers**: All API endpoints (PUT/GET/DELETE) are traced
+- **Replication Flows**: Track data replication across nodes
+- **Spans**: Each operation creates spans with relevant attributes (block ID, replica name, status)
+- **Metrics**: Request counters for PUT, GET, DELETE operations
+- **Error Tracking**: Failed operations recorded with error details
+
+### **Viewing Traces in Jaeger**
+
+```bash
+# Deploy Jaeger
+kubectl apply -f k8s/observability/jeager.yaml
+
+# Port-forward to access Jaeger UI
+kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
+
+# Open in browser
+open http://localhost:16686
+```
+
+**Using Jaeger UI:**
+1. Select service: `goblocks`
+2. Click "Find Traces"
+3. View distributed traces showing:
+   - Request flow across replicas
+   - Span timing and latency
+   - Block IDs and operation types
+   - Success/failure status
+   - Error stack traces
+
+### **Trace Attributes**
+
+Each span includes contextual information:
+- `block.id` - The block being operated on
+- `replica.name` - Which replica handled the request
+- `operation` - Type of operation (PUT/GET/DELETE)
+- `status` - Success or error state
+- `error.description` - Detailed error messages when failures occur
+
+### **Benefits**
+
+- **Debug Replication Issues**: See exactly which replicas received data
+- **Performance Analysis**: Identify slow operations and bottlenecks
+- **Request Tracing**: Follow a single request across multiple nodes
+- **Error Investigation**: Pinpoint where and why operations fail
 
 ## How It Works
 
@@ -132,14 +184,15 @@ minikube start
 eval $(minikube docker-env)
 docker build -t goblocks:latest .
 
-# 3. Deploy namespace, ZooKeeper, and BlockStore
+# 3. Deploy namespace, ZooKeeper, BlockStore, and Observability
 kubectl apply -f k8s/ns.yaml
 kubectl apply -f k8s/zookeeper/deploy.yaml
 kubectl apply -f k8s/zookeeper/service.yaml
-kubectl apply -f k8s/blockstore/configmap.yaml
-kubectl apply -f k8s/blockstore/service-headless.yaml
-kubectl apply -f k8s/blockstore/statefulset.yaml
-kubectl apply -f k8s/blockstore/service-external.yaml
+kubectl apply -f k8s/observability/jeager.yaml
+kubectl apply -f k8s/store/configmap.yaml
+kubectl apply -f k8s/store/service-headless.yaml
+kubectl apply -f k8s/store/statefulset.yaml
+kubectl apply -f k8s/store/service-external.yaml
 
 # 4. Wait for pods to be ready
 kubectl get pods -n goblocks -w
@@ -268,10 +321,18 @@ export ReplicaName="node3"
 ```
 
 ### **Environment Variables**
+
+**Core Configuration:**
 - `ZKAddress`: Zookeeper server address (default: localhost:2181)
 - `ReplicaName`: Unique name for this node (required)
 - `ReplicaAddress`: Address where this node is reachable (required)
 - `ReplicationFactor`: Number of replicas per block (default: 3)
+
+**Observability (OpenTelemetry):**
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint for traces (e.g., http://jaeger-collector:4317)
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol to use (grpc or http)
+- `OTEL_SERVICE_NAME`: Service name shown in tracing UI (default: goblocks)
+- `OTEL_RESOURCE_ATTRIBUTES`: Additional resource attributes (e.g., service.version=1.0)
 
 ## HTTP API
 
@@ -296,6 +357,10 @@ curl http://localhost:3002/block/myblock -o retrieved.bin
 
 # Delete a block
 curl -X DELETE http://localhost:3003/block/myblock
+
+# View traces in Jaeger (Kubernetes)
+kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
+# Open http://localhost:16686 and select service "goblocks"
 ```
 
 ## Roadmap
@@ -308,7 +373,9 @@ curl -X DELETE http://localhost:3003/block/myblock
 - [x] **Kubernetes Deployment**: StatefulSet-based deployment with stable identities
 
 ### **🚧 Phase 2: Observability & Monitoring**
-- [ ] **OpenTelemetry Integration**: Distributed tracing for request flows
+- [x] **OpenTelemetry Integration**: Distributed tracing for request flows
+- [x] **Jaeger Deployment**: Kubernetes deployment for trace visualization
+- [x] **Handler Instrumentation**: All HTTP endpoints traced with spans and attributes
 - [ ] **Prometheus Metrics**: Request rates, latencies, error rates, storage usage, migration metrics
 - [ ] **Grafana Dashboards**: Real-time visualization of cluster health and migration status
 - [ ] **SLO Tracking**: Availability SLOs with error budget monitoring
