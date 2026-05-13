@@ -6,12 +6,30 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Server struct {
 	Handler *Handler
 	Node    *replication.Node
 }
+
+const name = "goblocks"
+
+var (
+	tracer              = otel.Tracer(name)
+	meter               = otel.Meter(name)
+	logger              = otelslog.NewLogger(name)
+	PutCount            metric.Int64Counter
+	GetCount            metric.Int64Counter
+	DeleteCount         metric.Int64Counter
+	HealthCount         metric.Int64Counter
+	InternalPutCount    metric.Int64Counter
+	InternalDeleteCount metric.Int64Counter
+)
 
 func New(cfg *config.Config) (*Server, error) {
 
@@ -20,7 +38,7 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to create replication node: %v", err)
 	}
 	log.Printf("connected to zookeeper %s:%s", cfg.ZKAddress, cfg.ZKPort)
-	if node.Replicas == nil || len(node.Replicas) == 0 {
+	if len(node.Replicas) == 0 {
 		log.Print("Did not find any replicas in the ring.")
 	}
 	log.Printf("discovered Nodes: %v", node.Replicas)
@@ -28,6 +46,14 @@ func New(cfg *config.Config) (*Server, error) {
 	replClient := replication.NewClient(node)
 
 	handler := NewHandler(replClient)
+
+	PutCount, _ = meter.Int64Counter("blocks.put.count")
+	GetCount, _ = meter.Int64Counter("blocks.get.count")
+	DeleteCount, _ = meter.Int64Counter("blocks.delete.count")
+	HealthCount, _ = meter.Int64Counter("blocks.health.count")
+	InternalPutCount, _ = meter.Int64Counter("blocks.internalput.count")
+	InternalDeleteCount, _ = meter.Int64Counter("blocks,internaldelete.count")
+
 	return &Server{
 		Handler: handler,
 		Node:    node,

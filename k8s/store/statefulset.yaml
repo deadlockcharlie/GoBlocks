@@ -40,6 +40,15 @@ spec:
           value: "$(ReplicaName).blockstore-headless.goblocks.svc.cluster.local"
         - name: ReplicationFactor
           value: "3"
+        # OpenTelemetry configuration
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://jaeger-collector.goblocks.svc.cluster.local:4317"
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: "grpc"
+        - name: OTEL_SERVICE_NAME
+          value: "goblocks"
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "service.version=1.0,deployment.environment=dev"
         resources:
           requests: 
             memory: "64Mi"
