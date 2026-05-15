@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"blockstore/config"
+	"blockstore/observability"
 	"blockstore/replication"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -25,28 +26,27 @@ func NewHandler(replClient *replication.Client) *Handler {
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracer.Start(r.Context(), "Health")
+	ctx, span := observability.Tracer.Start(r.Context(), "Health")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("replica.name", h.replClient.Node.Name),
 	)
-	HealthCount.Add(ctx, 1)
+	observability.HealthCount.Add(ctx, 1)
 	span.SetStatus(codes.Ok, "Health endpoint responded successfully")
 	fmt.Fprintln(w, "ok")
 }
 
 func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tracer.Start(r.Context(), "PutBlock")
+	ctx, span := observability.Tracer.Start(r.Context(), "PutBlock")
 	defer span.End()
 
+	id := strings.TrimPrefix(r.URL.Path, "/block/")
 	span.SetAttributes(
 		attribute.String("replica.name", h.replClient.Node.Name),
+		attribute.String("block.id", id),
 	)
-	PutCount.Add(ctx, 1)
-
-	id := strings.TrimPrefix(r.URL.Path, "/block/")
-
+	observability.PutCount.Add(ctx, 1)
 	block, err := parseBlock(r.Body)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Block size must be %d bytes", config.BlockSize), http.StatusBadRequest)
@@ -55,7 +55,7 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.replClient != nil {
-		err = h.replClient.PutBlock(id, block)
+		err = h.replClient.PutBlock(ctx, id, block)
 		if err != nil {
 			log.Printf("Replication failed: %v", err)
 			// TODO: rollback or implement proper 2PC - known limitation for now
@@ -71,14 +71,14 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 
-	ctx, span := tracer.Start(r.Context(), "GetBlock")
+	ctx, span := observability.Tracer.Start(r.Context(), "GetBlock")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
-	GetCount.Add(ctx, 1)
+	observability.GetCount.Add(ctx, 1)
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
 
-	block, err := h.replClient.GetBlock(id)
+	block, err := h.replClient.GetBlock(ctx, id)
 	if err != nil {
 		http.Error(w, "Block with this id does not exist", http.StatusNotFound)
 		span.SetStatus(codes.Error, "[GetBlock] Block with this id does not exist.")
@@ -92,11 +92,11 @@ func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
-	ctx, span := tracer.Start(r.Context(), "DeleteBlock")
+	ctx, span := observability.Tracer.Start(r.Context(), "DeleteBlock")
 	defer span.End()
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
-	DeleteCount.Add(ctx, 1)
-	err := h.replClient.DeleteBlock(id)
+	observability.DeleteCount.Add(ctx, 1)
+	err := h.replClient.DeleteBlock(ctx, id)
 	if err != nil {
 		http.Error(w, "block not found", http.StatusNotFound)
 		span.SetStatus(codes.Error, "[DeleteBlock] Block with this id does not exist")
@@ -109,9 +109,9 @@ func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
-	ctx, span := tracer.Start(r.Context(), "InternalPutBlock")
+	ctx, span := observability.Tracer.Start(r.Context(), "InternalPutBlock")
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
-	InternalPutCount.Add(ctx, 1)
+	observability.InternalPutCount.Add(ctx, 1)
 	log.Printf("Internal PUT for block: %s", id)
 
 	block, err := parseBlock(r.Body)
@@ -121,7 +121,7 @@ func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.replClient.Node.Store.Put(id, block)
+	err = h.replClient.Node.Store.Put(ctx, id, block)
 	if err != nil {
 		http.Error(w, "Failed to write block", http.StatusInternalServerError)
 		span.SetStatus(codes.Error, "[InternalPutBlock] Block replication failed")
@@ -134,10 +134,10 @@ func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) InternalDeleteBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
-	ctx, span := tracer.Start(r.Context(), "InternalDeleteBlock")
+	ctx, span := observability.Tracer.Start(r.Context(), "InternalDeleteBlock")
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
-	InternalDeleteCount.Add(ctx, 1)
-	h.replClient.Node.Store.Delete(id)
+	observability.InternalDeleteCount.Add(ctx, 1)
+	h.replClient.Node.Store.Delete(ctx, id)
 	span.SetStatus(codes.Ok, "[InternalDeleteBlock] successful for id"+id)
 	w.WriteHeader(http.StatusOK)
 }

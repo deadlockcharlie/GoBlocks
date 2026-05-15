@@ -4,6 +4,7 @@ import (
 	"blockstore/config"
 	"blockstore/storage"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -340,7 +341,7 @@ func (n *Node) performMigration() {
 
 		if !stillOwner {
 			// THe node is not an owner anymore, so transfer to the new owner.
-			n.Store.MarkStale(blockID) // Mark the node stale to be garbage collected later
+			n.Store.MarkStale(context.Background(), blockID) // Mark the node stale to be garbage collected later
 			staleCount++
 			log.Printf("Block %s marked stale. Will be garbage collected", blockID)
 		}
@@ -362,7 +363,7 @@ func (n *Node) performMigration() {
 			}
 
 			if !hadItBefore {
-				block, ok := n.Store.Get(blockID)
+				block, ok := n.Store.Get(context.Background(), blockID)
 
 				if !ok {
 					log.Printf("Block %s disappeared during migration. Fatal error", blockID)
@@ -581,7 +582,7 @@ func (n *Node) scheduleGarbageCollection() {
 	log.Printf("Scheduling GC after %v grace period", gracePeriod)
 	time.Sleep(gracePeriod)
 
-	count := n.Store.GarbageCollect(gracePeriod)
+	count := n.Store.GarbageCollect(context.Background(), gracePeriod)
 	log.Printf("Garbage collection complete: removed %d stale blocks", count)
 }
 func (n *Node) Shutdown() {

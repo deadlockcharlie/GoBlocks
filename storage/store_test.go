@@ -2,6 +2,7 @@ package storage
 
 import (
 	"blockstore/config"
+	"context"
 	"testing"
 )
 
@@ -19,10 +20,10 @@ func TestBlockStore_PutAndGet(t *testing.T) {
 	store := NewStore()
 	block := makeBlock(0xAB)
 
-	if err := store.Put("block1", block); err != nil {
+	if err := store.Put(context.Background(), "block1", block); err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
-	got, ok := store.Get("block1")
+	got, ok := store.Get(context.Background(), "block1")
 	if !ok {
 		t.Fatal("expected block to exist")
 	}
@@ -33,7 +34,7 @@ func TestBlockStore_PutAndGet(t *testing.T) {
 
 func TestBlockStore_GetNonExistent(t *testing.T) {
 	store := NewStore()
-	_, ok := store.Get("nonexistent")
+	_, ok := store.Get(context.Background(), "nonexistent")
 	if ok {
 		t.Error("Get of nonexistent block should return false")
 	}
@@ -44,13 +45,13 @@ func TestBlockStore_OverwriteBlock(t *testing.T) {
 	block1 := makeBlock(0x01)
 	block2 := makeBlock(0x02)
 
-	if err := store.Put("block1", block1); err != nil {
+	if err := store.Put(context.Background(), "block1", block1); err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
-	if err := store.Put("block1", block2); err != nil {
+	if err := store.Put(context.Background(), "block1", block2); err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
-	got, ok := store.Get("block1")
+	got, ok := store.Get(context.Background(), "block1")
 	if !ok {
 		t.Fatal("expected block to exist")
 	}
@@ -64,12 +65,12 @@ func TestBlockStore_OverwriteBlock(t *testing.T) {
 func TestBlockStore_Delete(t *testing.T) {
 	store := NewStore()
 	block := makeBlock(0xFF)
-	if err := store.Put("block1", block); err != nil {
+	if err := store.Put(context.Background(), "block1", block); err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
-	store.Delete("block1")
+	store.Delete(context.Background(), "block1")
 
-	_, ok := store.Get("block1")
+	_, ok := store.Get(context.Background(), "block1")
 	if ok {
 		t.Error("Block should not exist after delete")
 	}
@@ -77,21 +78,21 @@ func TestBlockStore_Delete(t *testing.T) {
 
 func TestBlockStore_DeleteNonExistent(t *testing.T) {
 	store := NewStore()
-	store.Delete("doesnotexist")
+	store.Delete(context.Background(), "doesnotexist")
 }
 
 func TestBlockStore_DeleteThenPut(t *testing.T) {
 	store := NewStore()
 	block := makeBlock(0xCC)
-	if err := store.Put("id1", block); err != nil {
-		t.Fatalf("first Put failed: %v", err)
+	if err := store.Put(context.Background(), "id1", block); err != nil {
+		t.Fatalf("Put failed: %v", err)
 	}
-	store.Delete("id1")
-	if err := store.Put("id1", block); err != nil {
+	store.Delete(context.Background(), "id1")
+	if err := store.Put(context.Background(), "id1", block); err != nil {
 		t.Fatalf("second Put failed: %v", err)
 	}
 
-	got, ok := store.Get("id1")
+	got, ok := store.Get(context.Background(), "id1")
 	if !ok {
 		t.Fatal("expected block to exist after re-put")
 	}
@@ -107,7 +108,7 @@ func TestBlockStore_ConcurrentPut(t *testing.T) {
 	done := make(chan bool, 10)
 	for i := 0; i < 10; i++ {
 		go func(n int) {
-			store.Put("block", block) //nolint:errcheck
+			store.Put(context.Background(), "block", block) //nolint:errcheck
 			done <- true
 		}(i)
 	}
@@ -119,20 +120,20 @@ func TestBlockStore_ConcurrentPut(t *testing.T) {
 func TestBlockStore_ConcurrentGetAndPut(t *testing.T) {
 	store := NewStore()
 	block := makeBlock(0x05)
-	if err := store.Put("block1", block); err != nil {
+	if err := store.Put(context.Background(), "block1", block); err != nil {
 		t.Fatalf("Put failed: %v", err)
 	}
 
 	done := make(chan bool, 20)
 	for i := 0; i < 10; i++ {
 		go func() {
-			store.Get("block1") //nolint:errcheck
+			store.Get(context.Background(), "block1") //nolint:errcheck
 			done <- true
 		}()
 	}
 	for i := 0; i < 10; i++ {
 		go func() {
-			store.Put("block1", block) //nolint:errcheck
+			store.Put(context.Background(), "block1", block) //nolint:errcheck
 			done <- true
 		}()
 	}
@@ -150,12 +151,12 @@ func TestBlockStore_MultipleBlocks(t *testing.T) {
 	}
 
 	for id, block := range blocks {
-		if err := store.Put(id, block); err != nil {
+		if err := store.Put(context.Background(), id, block); err != nil {
 			t.Fatalf("Put %s failed: %v", id, err)
 		}
 	}
 	for id, expected := range blocks {
-		got, _ := store.Get(id)
+		got, _ := store.Get(context.Background(), id)
 		if got != expected {
 			t.Errorf("block %s has wrong data", id)
 		}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +106,7 @@ func TestPutBlock_EmptyBody(t *testing.T) {
 func TestGetBlock_ExistingBlock(t *testing.T) {
 	client := buildTestClient("node1")
 	block := makeTestBlock(0xCC)
-	if err := client.Node.Store.Put("myblock", block); err != nil {
+	if err := client.Node.Store.Put(context.Background(), "myblock", block); err != nil {
 		t.Fatalf("setup Put failed: %v", err)
 	}
 
@@ -140,7 +141,7 @@ func TestGetBlock_NonExistentBlock(t *testing.T) {
 func TestDeleteBlock_ExistingBlock(t *testing.T) {
 	client := buildTestClient("node1")
 	block := makeTestBlock(0x01)
-	if err := client.Node.Store.Put("delme", block); err != nil {
+	if err := client.Node.Store.Put(context.Background(), "delme", block); err != nil {
 		t.Fatalf("setup Put failed: %v", err)
 	}
 
@@ -170,7 +171,7 @@ func TestInternalPutBlock_ValidBlock(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
 	}
-	got, _ := client.Node.Store.Get("internal1")
+	got, _ := client.Node.Store.Get(context.Background(), "internal1")
 	if got != block {
 		t.Error("block was not stored correctly via internal PUT")
 	}
@@ -193,7 +194,7 @@ func TestInternalPutBlock_InvalidSize(t *testing.T) {
 func TestInternalDeleteBlock(t *testing.T) {
 	client := buildTestClient("node1")
 	block := makeTestBlock(0xDD)
-	if err := client.Node.Store.Put("todelete", block); err != nil {
+	if err := client.Node.Store.Put(context.Background(), "todelete", block); err != nil {
 		t.Fatalf("setup Put failed: %v", err)
 	}
 
@@ -206,7 +207,7 @@ func TestInternalDeleteBlock(t *testing.T) {
 	if w.Code != http.StatusNoContent {
 		t.Errorf("expected 204, got %d", w.Code)
 	}
-	got, _ := client.Node.Store.Get("todelete")
+	got, _ := client.Node.Store.Get(context.Background(), "todelete")
 	var empty [config.BlockSize]byte
 	if got != empty {
 		t.Error("block should be empty after internal delete")
@@ -327,4 +328,3 @@ func TestHandlerIntegration_MultipleBlocks(t *testing.T) {
 		}
 	}
 }
-

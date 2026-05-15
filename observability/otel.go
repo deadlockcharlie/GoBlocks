@@ -4,16 +4,31 @@ import (
 	"context"
 	"errors"
 
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/log/global"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
-	"go.opentelemetry.io/otel/sdk/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/trace"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+)
+
+const name = "goblocks"
+
+var (
+	Tracer              = otel.Tracer(name)
+	Meter               = otel.Meter(name)
+	Logger              = otelslog.NewLogger(name)
+	PutCount            metric.Int64Counter
+	GetCount            metric.Int64Counter
+	DeleteCount         metric.Int64Counter
+	HealthCount         metric.Int64Counter
+	InternalPutCount    metric.Int64Counter
+	InternalDeleteCount metric.Int64Counter
 )
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -66,6 +81,13 @@ func SetupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
+	PutCount, _ = Meter.Int64Counter("blocks.put.count")
+	GetCount, _ = Meter.Int64Counter("blocks.get.count")
+	DeleteCount, _ = Meter.Int64Counter("blocks.delete.count")
+	HealthCount, _ = Meter.Int64Counter("blocks.health.count")
+	InternalPutCount, _ = Meter.Int64Counter("blocks.internalput.count")
+	InternalDeleteCount, _ = Meter.Int64Counter("blocks,internaldelete.count")
+
 	return shutdown, err
 }
 
@@ -88,7 +110,7 @@ func newTracerProvider(ctx context.Context) (*trace.TracerProvider, error) {
 	return tracerProvider, nil
 }
 
-func newMeterProvider(ctx context.Context) (*metric.MeterProvider, error) {
+func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
 
 	metricReader, err := autoexport.NewMetricReader(ctx)
 	if err != nil {
