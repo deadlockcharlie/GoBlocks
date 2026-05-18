@@ -6,13 +6,16 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"blockstore/config"
 	"blockstore/observability"
 	"blockstore/replication"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Handler struct {
@@ -23,6 +26,11 @@ func NewHandler(replClient *replication.Client) *Handler {
 	return &Handler{
 		replClient: replClient,
 	}
+}
+
+func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
+	promhttp.Handler().ServeHTTP(w, r)
+
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -38,8 +46,13 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	ctx, span := observability.Tracer.Start(r.Context(), "PutBlock")
 	defer span.End()
+	defer func() {
+		duration := float64(time.Since(start).Milliseconds())
+		observability.PutDuration.Record(ctx, duration)
+	}()
 
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
 	span.SetAttributes(
@@ -51,6 +64,7 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Block size must be %d bytes", config.BlockSize), http.StatusBadRequest)
 		span.SetStatus(codes.Error, "[PutBlock] Incorrect block size. Expected 4KB")
+		observability.ErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("operation", "put"), attribute.String("error", "invalid_size")))
 		return
 	}
 
@@ -61,18 +75,24 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 			// TODO: rollback or implement proper 2PC - known limitation for now
 			http.Error(w, "Replication failed", http.StatusServiceUnavailable)
 			span.SetStatus(codes.Error, "[PutBlock] Replication failed")
+			observability.ErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("operation", "put"), attribute.String("error", "replication_failed")))
 			return
 		}
 	}
 
+	observability.BlocksStored.Add(ctx, 1)
 	w.WriteHeader(http.StatusCreated)
 	span.SetStatus(codes.Ok, "[PutBlock] successful for block id "+id)
 }
 
 func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
-
+	start := time.Now()
 	ctx, span := observability.Tracer.Start(r.Context(), "GetBlock")
 	defer span.End()
+	defer func() {
+		duration := float64(time.Since(start).Milliseconds())
+		observability.GetDuration.Record(ctx, duration)
+	}()
 
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
 	observability.GetCount.Add(ctx, 1)
@@ -82,7 +102,7 @@ func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Block with this id does not exist", http.StatusNotFound)
 		span.SetStatus(codes.Error, "[GetBlock] Block with this id does not exist.")
-
+		observability.ErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("operation", "get"), attribute.String("error", "not_found")))
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -91,18 +111,26 @@ func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
 	ctx, span := observability.Tracer.Start(r.Context(), "DeleteBlock")
 	defer span.End()
+	defer func() {
+		duration := float64(time.Since(start).Milliseconds())
+		observability.DeleteDuration.Record(ctx, duration)
+	}()
+
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
 	observability.DeleteCount.Add(ctx, 1)
 	err := h.replClient.DeleteBlock(ctx, id)
 	if err != nil {
 		http.Error(w, "block not found", http.StatusNotFound)
 		span.SetStatus(codes.Error, "[DeleteBlock] Block with this id does not exist")
+		observability.ErrorCount.Add(ctx, 1, metric.WithAttributes(attribute.String("operation", "delete"), attribute.String("error", "not_found")))
 		return
 	}
 
+	observability.BlocksStored.Add(ctx, -1)
 	w.WriteHeader(http.StatusNoContent)
 	span.SetStatus(codes.Ok, "[GetBlock] successful for block id "+id)
 }

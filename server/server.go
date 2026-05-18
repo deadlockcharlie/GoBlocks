@@ -37,6 +37,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 func (s *Server) Start() error {
 	http.HandleFunc("/health", s.Handler.Health)
+	http.HandleFunc("/metrics", s.Handler.Metrics)
 
 	http.HandleFunc("/block/", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

@@ -7,6 +7,7 @@ import (
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/exporters/autoexport"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/metric"
@@ -20,15 +21,23 @@ import (
 const name = "goblocks"
 
 var (
-	Tracer              = otel.Tracer(name)
-	Meter               = otel.Meter(name)
-	Logger              = otelslog.NewLogger(name)
+	Tracer = otel.Tracer(name)
+	Meter  = otel.Meter(name)
+	Logger = otelslog.NewLogger(name)
+	// Counters
 	PutCount            metric.Int64Counter
 	GetCount            metric.Int64Counter
 	DeleteCount         metric.Int64Counter
 	HealthCount         metric.Int64Counter
 	InternalPutCount    metric.Int64Counter
 	InternalDeleteCount metric.Int64Counter
+	ErrorCount          metric.Int64Counter
+	// Histograms for latency
+	PutDuration    metric.Float64Histogram
+	GetDuration    metric.Float64Histogram
+	DeleteDuration metric.Float64Histogram
+	// Gauges
+	BlocksStored metric.Int64UpDownCounter
 )
 
 // setupOTelSDK bootstraps the OpenTelemetry pipeline.
@@ -81,12 +90,36 @@ func SetupOTelSDK(ctx context.Context) (func(context.Context) error, error) {
 	shutdownFuncs = append(shutdownFuncs, loggerProvider.Shutdown)
 	global.SetLoggerProvider(loggerProvider)
 
-	PutCount, _ = Meter.Int64Counter("blocks.put.count")
-	GetCount, _ = Meter.Int64Counter("blocks.get.count")
-	DeleteCount, _ = Meter.Int64Counter("blocks.delete.count")
-	HealthCount, _ = Meter.Int64Counter("blocks.health.count")
-	InternalPutCount, _ = Meter.Int64Counter("blocks.internalput.count")
-	InternalDeleteCount, _ = Meter.Int64Counter("blocks,internaldelete.count")
+	// Initialize counters
+	PutCount, _ = Meter.Int64Counter("blocks.put.count",
+		metric.WithDescription("Total number of PUT operations"))
+	GetCount, _ = Meter.Int64Counter("blocks.get.count",
+		metric.WithDescription("Total number of GET operations"))
+	DeleteCount, _ = Meter.Int64Counter("blocks.delete.count",
+		metric.WithDescription("Total number of DELETE operations"))
+	HealthCount, _ = Meter.Int64Counter("blocks.health.count",
+		metric.WithDescription("Total number of health check requests"))
+	InternalPutCount, _ = Meter.Int64Counter("blocks.internalput.count",
+		metric.WithDescription("Total number of internal PUT operations"))
+	InternalDeleteCount, _ = Meter.Int64Counter("blocks.internaldelete.count",
+		metric.WithDescription("Total number of internal DELETE operations"))
+	ErrorCount, _ = Meter.Int64Counter("blocks.errors.count",
+		metric.WithDescription("Total number of errors"))
+
+	// Initialize histograms for latency (in milliseconds)
+	PutDuration, _ = Meter.Float64Histogram("blocks.put.duration",
+		metric.WithDescription("PUT operation latency in milliseconds"),
+		metric.WithUnit("ms"))
+	GetDuration, _ = Meter.Float64Histogram("blocks.get.duration",
+		metric.WithDescription("GET operation latency in milliseconds"),
+		metric.WithUnit("ms"))
+	DeleteDuration, _ = Meter.Float64Histogram("blocks.delete.duration",
+		metric.WithDescription("DELETE operation latency in milliseconds"),
+		metric.WithUnit("ms"))
+
+	// Initialize gauges
+	BlocksStored, _ = Meter.Int64UpDownCounter("blocks.stored.count",
+		metric.WithDescription("Current number of blocks stored"))
 
 	return shutdown, err
 }
@@ -111,19 +144,13 @@ func newTracerProvider(ctx context.Context) (*trace.TracerProvider, error) {
 }
 
 func newMeterProvider(ctx context.Context) (*sdkmetric.MeterProvider, error) {
-
-	metricReader, err := autoexport.NewMetricReader(ctx)
+	exporter, err := prometheus.New()
 	if err != nil {
 		return nil, err
 	}
 
-	// metricExporter, err := stdoutmetric.New(stdoutmetric.WithPrettyPrint())
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	meterProvider := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(metricReader),
+		sdkmetric.WithReader(exporter),
 	)
 	return meterProvider, nil
 }
