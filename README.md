@@ -49,30 +49,81 @@ GoBlockStore/
     └── store/        # StatefulSet, Services, ConfigMap
 ```
 
-## Observability & Tracing
+## Observability & Monitoring
 
-GoBlockStore includes comprehensive observability using **OpenTelemetry** and **Jaeger** for distributed tracing.
+GoBlockStore includes comprehensive observability with **OpenTelemetry**, **Jaeger** for distributed tracing, and **Prometheus + Grafana** for metrics and dashboards.
 
-### **What's Instrumented**
+### **Metrics Collected**
 
-- **HTTP Handlers**: All API endpoints (PUT/GET/DELETE) are traced
-- **Replication Flows**: Track data replication across nodes
-- **Spans**: Each operation creates spans with relevant attributes (block ID, replica name, status)
-- **Metrics**: Request counters for PUT, GET, DELETE operations
-- **Error Tracking**: Failed operations recorded with error details
+**Request Counters:**
+- `blocks_put_count` - Total PUT operations
+- `blocks_get_count` - Total GET operations
+- `blocks_delete_count` - Total DELETE operations
+- `blocks_internalput_count` - Internal replication operations
+- `blocks_internaldelete_count` - Internal deletion operations
+- `blocks_health_count` - Health check requests
+- `blocks_errors_count` - Errors by operation type and error category
 
-### **Viewing Traces in Jaeger**
+**Latency Histograms:**
+- `blocks_put_duration` - PUT operation latency (p50, p95, p99)
+- `blocks_get_duration` - GET operation latency
+- `blocks_delete_duration` - DELETE operation latency
+
+**Storage Gauges:**
+- `blocks_stored_count` - Current number of blocks stored per node
+
+### **Deploying Observability Stack**
 
 ```bash
-# Deploy Jaeger
+# Deploy Jaeger for distributed tracing
 kubectl apply -f k8s/observability/jeager.yaml
 
-# Port-forward to access Jaeger UI
-kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
+# Deploy Prometheus for metrics
+kubectl apply -f k8s/observability/prometheus.yaml
 
-# Open in browser
-open http://localhost:16686
+# Deploy Grafana for dashboards
+kubectl apply -f k8s/observability/grafana.yaml
 ```
+
+### **Accessing UIs**
+
+**Jaeger (Distributed Tracing):**
+```bash
+kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
+# Open http://localhost:16686
+```
+
+**Prometheus (Metrics):**
+```bash
+# Access via NodePort
+minikube service prometheus -n goblocks
+# Or port-forward
+kubectl port-forward -n goblocks svc/prometheus 9090:9090
+# Open http://localhost:9090
+```
+
+**Grafana (Dashboards):**
+```bash
+# Port-forward to Grafana
+kubectl port-forward -n goblocks svc/grafana 3000:3000
+# Open http://localhost:3000
+# Default credentials: admin/admin
+```
+
+### **Distributed Tracing with Jaeger**
+
+**What's Traced:**
+- HTTP Handlers: All API endpoints (PUT/GET/DELETE)
+- Replication Flows: Track data replication across nodes
+- Context Propagation: Distributed traces across multiple nodes
+- Error Tracking: Failed operations with stack traces
+
+**Trace Attributes:**
+- `block.id` - Block being operated on
+- `replica.name` - Replica handling the request
+- `operation` - Operation type
+- `http.status_code` - Response code
+- `error.description` - Error details
 
 **Using Jaeger UI:**
 1. Select service: `goblocks`
@@ -80,25 +131,65 @@ open http://localhost:16686
 3. View distributed traces showing:
    - Request flow across replicas
    - Span timing and latency
-   - Block IDs and operation types
+   - Replication coordinator → replica calls
    - Success/failure status
-   - Error stack traces
 
-### **Trace Attributes**
+### **Metrics & Dashboards with Prometheus + Grafana**
 
-Each span includes contextual information:
-- `block.id` - The block being operated on
-- `replica.name` - Which replica handled the request
-- `operation` - Type of operation (PUT/GET/DELETE)
-- `status` - Success or error state
-- `error.description` - Detailed error messages when failures occur
+**Setting up Grafana:**
+1. Access Grafana UI (see above)
+2. Add Prometheus data source:
+   - URL: `http://prometheus.goblocks.svc.cluster.local:9090` (or `http://prometheus:9090`)
+   - Click "Save & Test"
 
-### **Benefits**
+**Useful Prometheus Queries:**
 
-- **Debug Replication Issues**: See exactly which replicas received data
-- **Performance Analysis**: Identify slow operations and bottlenecks
-- **Request Tracing**: Follow a single request across multiple nodes
-- **Error Investigation**: Pinpoint where and why operations fail
+**Request Rate (ops/sec):**
+```promql
+rate(blocks_put_count[1m])
+rate(blocks_get_count[1m])
+rate(blocks_delete_count[1m])
+```
+
+**Latency Percentiles:**
+```promql
+# p99 latency
+histogram_quantile(0.99, rate(blocks_put_duration_bucket[5m]))
+histogram_quantile(0.99, rate(blocks_get_duration_bucket[5m]))
+
+# p50 latency
+histogram_quantile(0.50, rate(blocks_put_duration_bucket[5m]))
+
+# Average latency
+rate(blocks_put_duration_sum[5m]) / rate(blocks_put_duration_count[5m])
+```
+
+**Error Rate:**
+```promql
+rate(blocks_errors_count[5m])
+# Errors by operation
+sum by (operation) (rate(blocks_errors_count[5m]))
+```
+
+**Requests by Node:**
+```promql
+sum by (instance) (rate(blocks_put_count[5m]))
+```
+
+**Storage Usage:**
+```promql
+blocks_stored_count
+# Total across cluster
+sum(blocks_stored_count)
+```
+
+**Suggested Grafana Panels:**
+1. **Request Rate**: Time series graph with PUT/GET/DELETE rates
+2. **Latency Heatmap**: p50, p95, p99 latencies over time
+3. **Error Rate**: Time series of errors/sec by operation
+4. **Storage Distribution**: Bar gauge showing blocks per node
+5. **Throughput**: Single stat showing total ops/sec
+6. **Node Health**: State timeline showing up/down status
 
 ## How It Works
 
@@ -188,11 +279,15 @@ docker build -t goblocks:latest .
 kubectl apply -f k8s/ns.yaml
 kubectl apply -f k8s/zookeeper/deploy.yaml
 kubectl apply -f k8s/zookeeper/service.yaml
-kubectl apply -f k8s/observability/jeager.yaml
 kubectl apply -f k8s/store/configmap.yaml
 kubectl apply -f k8s/store/service-headless.yaml
 kubectl apply -f k8s/store/statefulset.yaml
 kubectl apply -f k8s/store/service-external.yaml
+
+# Observability stack
+kubectl apply -f k8s/observability/jeager.yaml
+kubectl apply -f k8s/observability/prometheus.yaml
+kubectl apply -f k8s/observability/grafana.yaml
 
 # 4. Wait for pods to be ready
 kubectl get pods -n goblocks -w
@@ -334,6 +429,8 @@ export ReplicaName="node3"
 - `OTEL_SERVICE_NAME`: Service name shown in tracing UI (default: goblocks)
 - `OTEL_RESOURCE_ATTRIBUTES`: Additional resource attributes (e.g., service.version=1.0)
 
+**Note**: Metrics are exposed via `/metrics` endpoint in Prometheus format. Traces are sent to OTLP endpoint (Jaeger).
+
 ## HTTP API
 
 ### **Block Operations**
@@ -341,6 +438,7 @@ export ReplicaName="node3"
 - `GET /block/{id}`: Retrieve a block (fetched from responsible nodes)
 - `DELETE /block/{id}`: Delete a block
 - `GET /health`: Health check endpoint
+- `GET /metrics`: Prometheus metrics endpoint
 
 ### **Internal Endpoints** (inter-node communication)
 - `PUT /internal/block/{id}`: Direct replication endpoint
@@ -358,9 +456,16 @@ curl http://localhost:3002/block/myblock -o retrieved.bin
 # Delete a block
 curl -X DELETE http://localhost:3003/block/myblock
 
+# View Prometheus metrics
+curl http://localhost:3001/metrics
+
 # View traces in Jaeger (Kubernetes)
 kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
 # Open http://localhost:16686 and select service "goblocks"
+
+# View metrics in Prometheus (Kubernetes)
+kubectl port-forward -n goblocks svc/prometheus 9090:9090
+# Open http://localhost:9090 and query: rate(blocks_put_count[1m])
 ```
 
 ## Roadmap
@@ -372,12 +477,15 @@ kubectl port-forward -n goblocks svc/jaeger-query 16686:16686
 - [x] **Garbage Collection**: Background cleanup after grace period
 - [x] **Kubernetes Deployment**: StatefulSet-based deployment with stable identities
 
-### **🚧 Phase 2: Observability & Monitoring**
+### **✅ Phase 2: Observability & Monitoring** (Completed)
 - [x] **OpenTelemetry Integration**: Distributed tracing for request flows
 - [x] **Jaeger Deployment**: Kubernetes deployment for trace visualization
 - [x] **Handler Instrumentation**: All HTTP endpoints traced with spans and attributes
-- [ ] **Prometheus Metrics**: Request rates, latencies, error rates, storage usage, migration metrics
-- [ ] **Grafana Dashboards**: Real-time visualization of cluster health and migration status
+- [x] **Prometheus Metrics**: Request rates, latencies, error rates, storage usage
+- [x] **Prometheus Deployment**: Kubernetes deployment with RBAC and auto-discovery
+- [x] **Grafana Integration**: Prometheus data source for dashboards
+- [x] **Comprehensive Metrics**: Latency histograms (p50/p95/p99), error counters, storage gauges
+- [ ] **Pre-built Dashboards**: Ready-to-import Grafana dashboard JSON
 - [ ] **SLO Tracking**: Availability SLOs with error budget monitoring
 - [ ] **Migration Observability**: Track data transfer progress, participant status
 
