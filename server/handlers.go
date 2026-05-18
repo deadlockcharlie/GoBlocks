@@ -156,6 +156,7 @@ func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	observability.BlocksStored.Add(ctx, 1)
 	w.WriteHeader(http.StatusOK)
 	span.SetStatus(codes.Ok, "[InternalPutBlock] successful for block id "+id)
 }
@@ -166,6 +167,7 @@ func (h *Handler) InternalDeleteBlock(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
 	observability.InternalDeleteCount.Add(ctx, 1)
 	h.replClient.Node.Store.Delete(ctx, id)
+	observability.BlocksStored.Add(ctx, -1)
 	span.SetStatus(codes.Ok, "[InternalDeleteBlock] successful for id"+id)
 	w.WriteHeader(http.StatusOK)
 }

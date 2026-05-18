@@ -67,7 +67,7 @@ data:
           # Add pod IP as target
           - source_labels: [__meta_kubernetes_pod_ip]
             target_label: __address__
-            replacement: ${1}:3000
+            replacement: ${1}:6000
 ---
 apiVersion: apps/v1
 kind: Deployment

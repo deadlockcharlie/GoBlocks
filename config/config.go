@@ -22,7 +22,7 @@ type Config struct {
 }
 
 func Load() *Config {
-	port := flag.String("port", "3000", "Port to listen on")
+	port := flag.String("port", "6000", "Port to listen on")
 	flag.Parse()
 
 	//replicas := os.Getenv("REPLICAS")

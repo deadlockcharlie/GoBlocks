@@ -8,6 +8,6 @@ spec:
   selector:
     app: blockstore
   ports:
-  - port: 3000
-    targetPort: 3000
+  - port: 6000
+    targetPort: 6000
     name: http

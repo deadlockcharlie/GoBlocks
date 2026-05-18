@@ -16,10 +16,10 @@ spec:
     spec:
       containers:
       - name: blockstore
-        image: goblocks:latest
-        imagePullPolicy: Never
+        image: blackjackap/goblocks:latest
+        imagePullPolicy: Always
         ports:
-        - containerPort: 3000
+        - containerPort: 6000
           name: http
         env:
         - name: ZKAddress
