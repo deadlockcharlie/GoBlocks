@@ -38,6 +38,8 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "health_check"),
 		attribute.String("replica.name", h.replClient.Node.Name),
 	)
 	observability.HealthCount.Add(ctx, 1)
@@ -56,6 +58,8 @@ func (h *Handler) PutBlock(w http.ResponseWriter, r *http.Request) {
 
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
 	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "put_block"),
 		attribute.String("replica.name", h.replClient.Node.Name),
 		attribute.String("block.id", id),
 	)
@@ -94,7 +98,11 @@ func (h *Handler) GetBlock(w http.ResponseWriter, r *http.Request) {
 		observability.GetDuration.Record(ctx, duration)
 	}()
 
-	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
+	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "get_block"),
+		attribute.String("replica.name", h.replClient.Node.Name),
+	)
 	observability.GetCount.Add(ctx, 1)
 	id := strings.TrimPrefix(r.URL.Path, "/block/")
 
@@ -120,7 +128,11 @@ func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 		observability.DeleteDuration.Record(ctx, duration)
 	}()
 
-	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
+	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "delete_block"),
+		attribute.String("replica.name", h.replClient.Node.Name),
+	)
 	observability.DeleteCount.Add(ctx, 1)
 	err := h.replClient.DeleteBlock(ctx, id)
 	if err != nil {
@@ -138,7 +150,12 @@ func (h *Handler) DeleteBlock(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
 	ctx, span := observability.Tracer.Start(r.Context(), "InternalPutBlock")
-	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
+	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "internal_put"),
+		attribute.String("replica.name", h.replClient.Node.Name),
+		attribute.String("block.id", id),
+	)
 	observability.InternalPutCount.Add(ctx, 1)
 	log.Printf("Internal PUT for block: %s", id)
 
@@ -164,7 +181,12 @@ func (h *Handler) InternalPutBlock(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) InternalDeleteBlock(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/internal/block/")
 	ctx, span := observability.Tracer.Start(r.Context(), "InternalDeleteBlock")
-	span.SetAttributes(attribute.String("replica.Name", h.replClient.Node.Name))
+	span.SetAttributes(
+		attribute.String("span.kind", "server"),
+		attribute.String("operation.type", "internal_delete"),
+		attribute.String("replica.name", h.replClient.Node.Name),
+		attribute.String("block.id", id),
+	)
 	observability.InternalDeleteCount.Add(ctx, 1)
 	h.replClient.Node.Store.Delete(ctx, id)
 	observability.BlocksStored.Add(ctx, -1)

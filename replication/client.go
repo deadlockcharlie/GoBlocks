@@ -37,6 +37,8 @@ func (c *Client) PutInReplica(ctx context.Context, replica ReplicaInfo, id strin
 	url := fmt.Sprintf("http://%s/internal/block/%s", addr, id)
 
 	span.SetAttributes(
+		attribute.String("span.kind", "client"),
+		attribute.String("operation.type", "replicate_put"),
 		attribute.String("block.id", id),
 		attribute.String("target.replica", replica.Name),
 		attribute.String("target.address", addr),
@@ -76,6 +78,8 @@ func (c *Client) DeleteInReplica(ctx context.Context, replica ReplicaInfo, id st
 	url := fmt.Sprintf("http://%s/internal/block/%s", addr, id)
 
 	span.SetAttributes(
+		attribute.String("span.kind", "client"),
+		attribute.String("operation.type", "replicate_delete"),
 		attribute.String("block.id", id),
 		attribute.String("target.replica", replica.Name),
 		attribute.String("target.address", addr),
@@ -125,6 +129,8 @@ func (c *Client) PutBlock(ctx context.Context, blockID string, block [config.Blo
 		replicationTargets = append(replicationTargets, replica.Name)
 	}
 	span.SetAttributes(
+		attribute.String("span.kind", "internal"),
+		attribute.String("operation.type", "coordinate_replication"),
 		attribute.String("block.id", blockID),
 		attribute.StringSlice("replication.targets", replicationTargets),
 	)
@@ -165,6 +171,8 @@ func (c *Client) DeleteBlock(ctx context.Context, blockID string) error {
 	}
 
 	span.SetAttributes(
+		attribute.String("span.kind", "internal"),
+		attribute.String("operation.type", "coordinate_deletion"),
 		attribute.String("block.id", blockID),
 		attribute.StringSlice("deletion.targets", nodeNames),
 		attribute.Int("deletion.target_count", len(nodes)),
@@ -193,7 +201,11 @@ func (c *Client) GetBlock(ctx context.Context, blockID string) ([config.BlockSiz
 	ctx, span := observability.Tracer.Start(ctx, "GetBlock")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("block.id", blockID))
+	span.SetAttributes(
+		attribute.String("span.kind", "internal"),
+		attribute.String("operation.type", "coordinate_get"),
+		attribute.String("block.id", blockID),
+	)
 
 	nodes := c.Node.HashRing.GetNodesForBlock(blockID, c.Node.ReplicationFactor)
 	if len(nodes) == 0 {
